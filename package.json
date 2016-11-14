@@ -1,22 +1,25 @@
 {
   "name": "linux-sac-bot",
-  "version": "0.1",
+  "version": "1.0.0",
   "description": "Automated Support",
   "engines": {
     "node": "5.9.1"
   },
-  "main": "server.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node app.js"
   },
   "dependencies": {
+    "body-parser": "^1.15.0",
     "pg": "4.x",
     "ejs": "2.4.1",
-    "express": "4.13.3"
+    "express": "4.13.3",
+    "request": "^2.72.0"
   },
+  "author": "Pedro Scocco, Vitor Santos",
   "repository": {
     "type": "git",
-    "url": "https://github.com/heroku/node-js-getting-started"
+    "url": "https://github.com/pedroscocco/linux-sac-bot"
   },
   "keywords": [
     "node",

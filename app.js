@@ -17,6 +17,8 @@ const
   https = require('https'),
   request = require('request');
 
+var pg = require('pg');
+
 var app = express();
 app.set('port', process.env.PORT || 5000);
 app.set('view engine', 'ejs');
@@ -36,11 +38,6 @@ if (!(APP_SECRET && VALIDATION_TOKEN && PAGE_ACCESS_TOKEN && SERVER_URL)) {
   process.exit(1);
 }
 
-/*
- * Use your own validation token. Check that the token used in the Webhook
- * setup is the same token used here.
- *
- */
 app.get('/webhook', function(req, res) {
   if (req.query['hub.mode'] === 'subscribe' &&
       req.query['hub.verify_token'] === VALIDATION_TOKEN) {
@@ -52,14 +49,6 @@ app.get('/webhook', function(req, res) {
   }
 });
 
-
-/*
- * All callbacks for Messenger are POST-ed. They will be sent to the same
- * webhook. Be sure to subscribe your app to your page to receive callbacks
- * for your page.
- * https://developers.facebook.com/docs/messenger-platform/product-overview/setup#subscribe_app
- *
- */
 app.post('/webhook', function (req, res) {
   var data = req.body;
 
@@ -83,10 +72,6 @@ app.post('/webhook', function (req, res) {
       });
     });
 
-    // Assume all went well.
-    //
-    // You must send back a 200, within 20 seconds, to let us know you've
-    // successfully received the callback. Otherwise, the request will time out.
     res.sendStatus(200);
   }
 });
@@ -116,19 +101,12 @@ function receivedAuthentication(event) {
   var recipientID = event.recipient.id;
   var timeOfAuth = event.timestamp;
 
-  // The 'ref' field is set in the 'Send to Messenger' plugin, in the 'data-ref'
-  // The developer can set this to an arbitrary value to associate the
-  // authentication callback with the 'Send to Messenger' click event. This is
-  // a way to do account linking when the user clicks the 'Send to Messenger'
-  // plugin.
   var passThroughParam = event.optin.ref;
 
   console.log("Received authentication for user %d and page %d with pass " +
     "through param '%s' at %d", senderID, recipientID, passThroughParam,
     timeOfAuth);
 
-  // When an authentication is received, we'll send a message back to the sender
-  // to let them know it was successful.
   sendTextMessage(senderID, "Authentication successful");
 }
 
@@ -147,26 +125,92 @@ function receivedMessage(event) {
   var appId = message.app_id;
   var metadata = message.metadata;
 
-  // You may get a text or attachment but not both
   var messageText = message.text;
   var messageAttachments = message.attachments;
   var quickReply = message.quick_reply;
 
   if (isEcho) {
-    // Just logging message echoes to console
     console.log("Received echo for message %s and app %d with metadata %s",
       messageId, appId, metadata);
     return;
-  } else if (quickReply) {
-    sendTextMessage(senderID, quickReplyPayload);
-    return;
   }
 
-  if (messageText) {
-    sendTextMessage(senderID, messageText);
+  if (messageText || quickReply) {
+    mainFlow(senderID, messageText || quickReply.payload);
   } else if (messageAttachments) {
     sendTextMessage(senderID, "Message with attachment received");
   }
+}
+
+function mainFlow(senderID, text) {
+  console.log('============ main flow ============');
+  getUser(senderID, function(user) {
+    if (user == null) {
+      getMessengerProfile(senderID, function(name) {
+        addUserToBD(senderID, name);
+        var newuser = {name: name, messenger_id: sender_id};
+        sendStartMessage(newuser);
+      });
+    }
+    sendStartMessage(user);
+  });
+}
+
+function getUser(messengerID, callback) {
+  console.log('============ get user ============');
+  pg.connect(process.env.DATABASE_URL, function(err, client, done) {
+    client.query( 'SELECT * FROM users WHERE messenger_id = $1::text', [messengerID], function(err, result) {
+      done();
+      if (err){
+        console.error(err);
+      }
+      if (result.rows.length > 0) {
+        callback(result.rows[0]);
+      } else {
+        callback(null);
+      }
+    });
+  });
+}
+
+function addUserToBD(messengerID, name, callback) {
+  console.log('============ add user db ============');
+  pg.connect(process.env.DATABASE_URL, function(err, client, done) {
+    client.query( 'insert into users (name, messenger_id, current_state) values ($1::text, $2::text, $3::text)', [name, messengerID, 'start'], function(err, result) {
+      done();
+      if (err){
+        console.error(err);
+      }
+      if (callback) {
+        if (result.rows.length > 0) {
+          callback(result.rows[0]);
+        } else {
+          callback(null);
+        }
+      }
+    });
+  });
+}
+
+function getMessengerProfile(messengerID, callback) {
+  console.log('============ messenger profile ============');
+  request({
+    uri: 'https://graph.facebook.com/v2.6/'+messengerID,
+    qs: { fields: 'first_name,last_name', access_token: PAGE_ACCESS_TOKEN },
+    method: 'GET',
+  }, function (error, response, body) {
+    if (!error && response.statusCode == 200) {
+      callback(body.first_name + ' ' + body.last_name);
+    } else {
+      console.log(error);
+    }
+  });
+}
+
+function sendStartMessage(user) {
+  console.log('============ send start ============');
+  console.log(user);
+  sendTextMessage(user.messenger_id, user.name + ', aqui estão suas opções iniciais:');
 }
 
 function sendTextMessage(recipientId, messageText) {

@@ -16,8 +16,9 @@ const
   express = require('express'),
   https = require('https'),
   request = require('request');
-
 var pg = require('pg');
+var StateMachine = require('javascript-state-machine');
+
 
 var app = express();
 app.set('port', process.env.PORT || 5000);
@@ -151,21 +152,22 @@ function mainFlow(senderID, text) {
         var newuser = {name: name, messenger_id: sender_id};
         sendStartMessage(newuser);
       });
+      return;
     }
-    sendStartMessage(user);
-    handleUserStateChange(user, text);
+    handleUserStateTransition(user, text);
   });
 }
 
 function getUser(messengerID, callback) {
   console.log('============ get user ============');
   pg.connect(process.env.DATABASE_URL, function(err, client, done) {
-    client.query( 'SELECT * FROM users WHERE messenger_id = $1::text', [messengerID], function(err, result) {
+    client.query( 'SELECT * FROM users WHERE messenger_id = $1::text;', [messengerID], function(err, result) {
       done();
       if (err){
         console.error(err);
       }
       if (result.rows.length > 0) {
+        console.log(result.rows[0]);
         callback(result.rows[0]);
       } else {
         callback(null);
@@ -177,13 +179,33 @@ function getUser(messengerID, callback) {
 function addUserToBD(messengerID, name, callback) {
   console.log('============ add user db ============');
   pg.connect(process.env.DATABASE_URL, function(err, client, done) {
-    client.query( 'insert into users (name, messenger_id, current_state) values ($1::text, $2::text, $3::text)', [name, messengerID, 'start'], function(err, result) {
+    client.query( 'insert into users (name, messenger_id, current_state) values ($1::text, $2::text, $3::text);', [name, messengerID, 'start'], function(err, result) {
       done();
       if (err){
         console.error(err);
       }
       if (callback) {
-        if (result.rows.length > 0) {
+        if (result && result.rows && result.rows.length > 0) {
+          callback(result.rows[0]);
+        } else {
+          callback(null);
+        }
+      }
+    });
+  });
+}
+
+function updateUserStateDB(user, state, callback){
+  console.log('============ update user db ============');
+  pg.connect(process.env.DATABASE_URL, function(err, client, done) {
+    client.query( 'UPDATE users SET current_state=$1::text WHERE messenger_id=$2::text;', [state, user.messenger_id], function(err, result) {
+      done();
+      if (err){
+        console.error(err);
+      }
+      console.log(result);
+      if (callback) {
+        if (result && result.rows && result.rows.length > 0) {
           callback(result.rows[0]);
         } else {
           callback(null);
@@ -208,14 +230,69 @@ function getMessengerProfile(messengerID, callback) {
   });
 }
 
+const FSM_DEFAULT_TRANSITIONS = [
+  { name: 'Sobre Impressão',  from: 'start',  to: 'print_1' },
+  { name: 'Reportar Problema', from: 'start', to: 'problem_1'    },
+  { name: 'Tirar Dúvida',  from: 'start',    to: 'doubt_1' },
+  { name: 'Próximo', from: 'print_1', to: 'print_2'  },
+  { name: 'Próximo', from: 'print_2', to: 'print_3'  },
+  { name: 'Recomeçar', from: '*', to: 'start'  }
+];
+
+const STATE_CONTENTS = {
+  start: 'Vamos recomeçar! O que deseja fazer?',
+  print_1: ```Qual minha quota mensal de impressão?
+
+75 páginas.```,
+  print_2: ```Como faço para saber quantas páginas restantes eu tenho na minha quota?
+
+Abra um terminal e digite:
+$ quotap```,
+  print_3: ```A impressora não está imprimindo, o que faço?
+
+Primeiramente, não mande o trabalho de impressão várias vezes, pois isso fará com que você perca quota de impressão.```,
+  problem_1: 'Comando ainda não suportado.',
+  doubt_1: 'Comando ainda não suportado.'
+};
+
 function sendStartMessage(user) {
   console.log('============ send start ============');
   var message = user.name + ', aqui estão suas opções iniciais:';
-  var options = ['Sobre Impressão', 'Reportar Problema', 'Tirar Dúvida'];
+  var fsm = StateMachine.create({
+    initial: 'start',
+    events: FSM_DEFAULT_TRANSITIONS
+  });
+  var options = fsm.transitions();
   sendQuickReply(user.messenger_id, message, options);
 }
 
-function handleUserStateChange(user, text) {
+function handleUserStateTransition(user, transition) {
+  console.log('============ handle state ============');
+  var fsm = StateMachine.create({
+    initial: user.current_state,
+    events: FSM_DEFAULT_TRANSITIONS
+  });
+
+  if (fsm.cannot(transition)) {
+    console.log('============ Unknown transition ============');
+    console.log(transition);
+    console.log(fsm.transitions());
+    var message = 'Não entendi o que você deseja! Aqui estão suas opções:';
+    sendQuickReply(user.messenger_id, message, fsm.transitions());
+    return;
+  }
+
+  console.log(fsm.current);
+  fsm[transition]();
+  updateUserStateDB(user, fsm.current);
+  user.current_state = fsm.current;
+  console.log('============ transitioned ============');
+  console.log(fsm.current);
+
+  sendTextMessage(user.messenger_id, STATE_CONTENTS[fsm.current]);
+  setTimeout(function(){
+    sendQuickReply(user.messenger_id, 'Opções:', fsm.transitions());
+  }, 1000);
 
 }
 

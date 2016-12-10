@@ -241,16 +241,9 @@ const FSM_DEFAULT_TRANSITIONS = [
 
 const STATE_CONTENTS = {
   start: 'Vamos recomeçar! O que deseja fazer?',
-  print_1: ```Qual minha quota mensal de impressão?
-
-75 páginas.```,
-  print_2: ```Como faço para saber quantas páginas restantes eu tenho na minha quota?
-
-Abra um terminal e digite:
-$ quotap```,
-  print_3: ```A impressora não está imprimindo, o que faço?
-
-Primeiramente, não mande o trabalho de impressão várias vezes, pois isso fará com que você perca quota de impressão.```,
+  print_1: 'Qual minha quota mensal de impressão?\n\n75 páginas.',
+  print_2: 'Como faço para saber quantas páginas restantes eu tenho na minha quota?\n\nAbra um terminal e digite:\n$ quotap',
+  print_3: 'A impressora não está imprimindo, o que faço?\n\nPrimeiramente, não mande o trabalho de impressão várias vezes, pois isso fará com que você perca quota de impressão.',
   problem_1: 'Comando ainda não suportado.',
   doubt_1: 'Comando ainda não suportado.'
 };

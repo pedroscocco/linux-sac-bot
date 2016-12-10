@@ -18,6 +18,7 @@ const
   request = require('request');
 var pg = require('pg');
 var StateMachine = require('javascript-state-machine');
+var cool = require('cool-ascii-faces');
 
 
 var app = express();
@@ -260,6 +261,11 @@ function sendStartMessage(user) {
 }
 
 function handleUserStateTransition(user, transition) {
+  if (transition == 'cool') {
+    var message = 'Say whaaaaaaaat?';
+    sendQuickReply(user.messenger_id, message, [cool(), cool(), cool(), cool(), cool()]);
+    return;
+  }
   console.log('============ handle state ============');
   var fsm = StateMachine.create({
     initial: user.current_state,
@@ -286,7 +292,6 @@ function handleUserStateTransition(user, transition) {
   setTimeout(function(){
     sendQuickReply(user.messenger_id, 'Opções:', fsm.transitions());
   }, 1000);
-
 }
 
 function sendTextMessage(recipientId, messageText) {

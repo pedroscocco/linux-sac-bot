@@ -153,6 +153,7 @@ function mainFlow(senderID, text) {
       });
     }
     sendStartMessage(user);
+    handleUserStateChange(user, text);
   });
 }
 
@@ -209,8 +210,13 @@ function getMessengerProfile(messengerID, callback) {
 
 function sendStartMessage(user) {
   console.log('============ send start ============');
-  console.log(user);
-  sendTextMessage(user.messenger_id, user.name + ', aqui estão suas opções iniciais:');
+  var message = user.name + ', aqui estão suas opções iniciais:';
+  var options = ['Sobre Impressão', 'Reportar Problema', 'Tirar Dúvida'];
+  sendQuickReply(user.messenger_id, message, options);
+}
+
+function handleUserStateChange(user, text) {
+
 }
 
 function sendTextMessage(recipientId, messageText) {
@@ -221,6 +227,26 @@ function sendTextMessage(recipientId, messageText) {
     message: {
       text: messageText,
       metadata: "DEVELOPER_DEFINED_METADATA"
+    }
+  };
+
+  callSendAPI(messageData);
+}
+
+function sendQuickReply(recipientId, message, options) {
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      text: message,
+      quick_replies: options.map(function(option) {
+        return {
+          "content_type":"text",
+          "title": option,
+          "payload": option
+        };
+      })
     }
   };
 

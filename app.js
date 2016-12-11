@@ -150,7 +150,7 @@ function mainFlow(senderID, text) {
     if (user == null) {
       getMessengerProfile(senderID, function(name) {
         addUserToBD(senderID, name);
-        var newuser = {name: name, messenger_id: sender_id};
+        var newuser = {name: name, messenger_id: senderID};
         sendStartMessage(newuser);
       });
       return;
